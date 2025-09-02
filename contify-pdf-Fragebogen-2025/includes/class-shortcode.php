@@ -44,7 +44,9 @@ class CON_FRA_2025_Shortcode {
                     'required' => __('Dieses Feld ist erforderlich.', 'contify-pdf-Fragebogen-2025'),
                     'success' => __('Vielen Dank! Ihre Anfrage wurde erfolgreich übermittelt.', 'contify-pdf-Fragebogen-2025'),
                     'error' => __('Es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.', 'contify-pdf-Fragebogen-2025'),
-                    'submitting' => __('Wird übermittelt...', 'contify-pdf-Fragebogen-2025')
+                    'submitting' => __('Wird übermittelt...', 'contify-pdf-Fragebogen-2025'),
+                    'step' => __('Schritt', 'contify-pdf-Fragebogen-2025'),
+                    'of' => __('von', 'contify-pdf-Fragebogen-2025')
                 )
             ));
         }
