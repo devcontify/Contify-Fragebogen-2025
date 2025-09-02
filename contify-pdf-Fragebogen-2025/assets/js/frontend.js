@@ -1,174 +1,192 @@
-/* Contify PDF Fragebogen 2025 - Frontend JavaScript */
+/* contify PDF Fragebogen 2025 - Frontend JavaScript */
 
 jQuery(document).ready(function($) {
     'use strict';
-    
-    const ConFra2025 = {
+
+    const ConFra2025Wizard = {
         form: null,
-        totalSections: 5,
-        completedSections: 0,
-        
+        totalSteps: 0,
+        currentStep: 1,
+
         init: function() {
             this.form = $('#conFra2025Form');
+            if (this.form.length === 0) {
+                return;
+            }
+            this.totalSteps = this.form.find('.form-section').length;
             this.bindEvents();
-            this.initProgressTracking();
-            this.openFirstSection();
+            this.showStep(this.currentStep, false); // Don't push state on initial load
+
+            // Handle browser back/forward
+            window.addEventListener('popstate', (event) => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const step = parseInt(urlParams.get('step')) || 1;
+                this.showStep(step, false);
+            });
         },
-        
+
         bindEvents: function() {
             this.form.on('submit', this.handleFormSubmit.bind(this));
-            
-            $(document).on('change', 'input, textarea, select', this.updateProgress.bind(this));
-            
-            window.toggleSection = this.toggleSection.bind(this);
+            this.form.find('.button-next').on('click', this.nextStep.bind(this));
+            this.form.find('.button-prev').on('click', this.prevStep.bind(this));
+
+            // Conditional fields logic
             window.toggleTextarea = this.toggleConditionalField.bind(this);
             window.toggleInput = this.toggleConditionalField.bind(this);
+
+            // Remove error on input change
+            this.form.find('input, textarea, select').on('input change', function() {
+                const $group = $(this).closest('.form-group');
+                if ($group.hasClass('error')) {
+                    $group.removeClass('error');
+                    $group.find('.error-message').remove();
+                }
+            });
         },
-        
-        openFirstSection: function() {
-            this.toggleSection(1);
-        },
-        
-        toggleSection: function(sectionNumber) {
-            const section = $('[data-section="' + sectionNumber + '"]');
-            const header = section.find('.section-header');
-            const content = section.find('.section-content');
-            const icon = header.find('.toggle-icon');
+
+        showStep: function(stepNum, pushState = true) {
+            if (stepNum < 1 || stepNum > this.totalSteps) {
+                return;
+            }
+            this.currentStep = stepNum;
+
+            this.form.find('.form-section').removeClass('active').hide();
+            this.form.find('.form-section[data-section="' + stepNum + '"]').fadeIn(300).addClass('active');
             
-            if (content.hasClass('active')) {
-                content.removeClass('active').slideUp(300);
-                header.removeClass('active');
-                icon.text('+');
-            } else {
-                content.addClass('active').slideDown(300);
-                header.addClass('active');
-                icon.text('−');
+            this.updateProgress();
+            this.updateStepIndicators();
+            this.scrollToTop();
+
+            if (pushState) {
+                const url = new URL(window.location);
+                url.searchParams.set('step', stepNum);
+                history.pushState({step: stepNum}, `Step ${stepNum}`, url);
             }
         },
+
+        nextStep: function() {
+            if (this.validateStep(this.currentStep)) {
+                if (this.currentStep < this.totalSteps) {
+                    this.showStep(this.currentStep + 1);
+                }
+            }
+        },
+
+        prevStep: function() {
+            if (this.currentStep > 1) {
+                this.showStep(this.currentStep - 1);
+            }
+        },
+
+        updateProgress: function() {
+            const percentage = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100;
+            $('#progressFill').css('width', percentage + '%');
+            $('#progressText').text(
+                `${conFra2025Ajax.messages.step || 'Schritt'} ${this.currentStep} ${conFra2025Ajax.messages.of || 'von'} ${this.totalSteps}`
+            );
+        },
         
+        updateStepIndicators: function() {
+            $('.step-indicator').removeClass('active completed');
+            for (let i = 1; i <= this.totalSteps; i++) {
+                const indicator = $('.step-indicator[data-step="' + i + '"]');
+                if (i < this.currentStep) {
+                    indicator.addClass('completed');
+                } else if (i === this.currentStep) {
+                    indicator.addClass('active');
+                }
+            }
+        },
+
+        validateStep: function(stepNum) {
+            let isValid = true;
+            const currentSection = this.form.find('.form-section[data-section="' + stepNum + '"]');
+            
+            this.clearErrors(currentSection);
+
+            currentSection.find('input[required], textarea[required], select[required]').each(function() {
+                const $field = $(this);
+                const $group = $field.closest('.form-group');
+                
+                if (!$field.is(':visible')) return;
+
+                if ($field.attr('type') === 'radio' || $field.attr('type') === 'checkbox') {
+                    const groupName = $field.attr('name');
+                    if(currentSection.find('input[name="' + groupName + '"]:checked').length === 0) {
+                       isValid = false;
+                       $group.addClass('error');
+                       if ($group.find('.error-message').length === 0) {
+                           $group.append('<span class="error-message">' + conFra2025Ajax.messages.required + '</span>');
+                       }
+                    }
+                } else {
+                    if (!$field.val() || $field.val().trim() === '') {
+                        isValid = false;
+                        $group.addClass('error');
+                        if ($group.find('.error-message').length === 0) {
+                            $group.append('<span class="error-message">' + conFra2025Ajax.messages.required + '</span>');
+                        }
+                    }
+                }
+            });
+            
+            if (!isValid) {
+                this.scrollToFirstError(currentSection);
+            }
+            
+            return isValid;
+        },
+
+        clearErrors: function(container) {
+            container.find('.form-group.error').removeClass('error');
+            container.find('.error-message').remove();
+        },
+        
+        scrollToFirstError: function(container) {
+            const firstError = container.find('.form-group.error').first();
+            if (firstError.length) {
+                $('html, body').animate({
+                    scrollTop: firstError.offset().top - 100
+                }, 500);
+            }
+        },
+
         toggleConditionalField: function(fieldId, show) {
             const wrapper = $('#' + fieldId + '_wrapper');
             const field = $('#' + fieldId);
-            
+
             if (show) {
                 wrapper.slideDown(300);
                 field.prop('required', true);
             } else {
                 wrapper.slideUp(300);
                 field.prop('required', false).val('');
+                const $group = field.closest('.form-group');
+                if ($group.hasClass('error')) {
+                    $group.removeClass('error');
+                    $group.find('.error-message').remove();
+                }
             }
         },
-        
-        initProgressTracking: function() {
-            this.updateProgress();
-        },
-        
-        updateProgress: function() {
-            let totalFields = 0;
-            let filledFields = 0;
-            
-            this.form.find('input, textarea, select').each(function() {
-                const $field = $(this);
-                const type = $field.attr('type');
-                
-                if (type === 'hidden' || $field.attr('name') === 'con_fra_2025_nonce' || $field.attr('name') === 'con_fra_2025_submit') {
-                    return;
-                }
-                
-                totalFields++;
-                
-                if (type === 'checkbox' || type === 'radio') {
-                    if ($field.is(':checked')) {
-                        filledFields++;
-                    }
-                } else {
-                    if ($field.val() && $field.val().trim() !== '') {
-                        filledFields++;
-                    }
-                }
-            });
-            
-            const percentage = Math.round((filledFields / totalFields) * 100);
-            
-            $('#progressFill').css('width', percentage + '%');
-            $('#progressText').text(percentage + '% ' + conFra2025Ajax.messages.completed || 'abgeschlossen');
-        },
-        
-        validateForm: function() {
-            let isValid = true;
-            const requiredFields = this.form.find('input[required], textarea[required], select[required]');
-            
-            this.clearErrors();
-            
-            requiredFields.each(function() {
-                const $field = $(this);
-                const $group = $field.closest('.form-group');
-                
-                if (!$field.val() || $field.val().trim() === '') {
-                    isValid = false;
-                    $group.addClass('error');
-                    
-                    if (!$group.find('.error-message').length) {
-                        $group.append('<span class="error-message">' + conFra2025Ajax.messages.required + '</span>');
-                    }
-                }
-            });
-            
-            const radioGroups = ['address_type', 'intonation_type', 'keywords_type'];
-            radioGroups.forEach(function(groupName) {
-                const $radioGroup = $('input[name="' + groupName + '"]');
-                if ($radioGroup.length > 0 && !$radioGroup.is(':checked')) {
-                    const $group = $radioGroup.closest('.form-group');
-                    $group.addClass('error');
-                    
-                    if (!$group.find('.error-message').length) {
-                        $group.append('<span class="error-message">' + conFra2025Ajax.messages.required + '</span>');
-                    }
-                    isValid = false;
-                }
-            });
-            
-            if (!isValid) {
-                this.scrollToFirstError();
-            }
-            
-            return isValid;
-        },
-        
-        clearErrors: function() {
-            this.form.find('.form-group.error').removeClass('error');
-            this.form.find('.error-message').remove();
-        },
-        
-        scrollToFirstError: function() {
-            const firstError = this.form.find('.form-group.error').first();
-            if (firstError.length) {
-                const section = firstError.closest('.form-section');
-                const sectionNumber = section.data('section');
-                
-                if (!section.find('.section-content').hasClass('active')) {
-                    this.toggleSection(sectionNumber);
-                }
-                
-                $('html, body').animate({
-                    scrollTop: firstError.offset().top - 100
-                }, 500);
-            }
-        },
-        
+
         handleFormSubmit: function(e) {
             e.preventDefault();
             
-            if (!this.validateForm()) {
-                this.showMessage(conFra2025Ajax.messages.error, 'error');
-                return;
+            // Final validation of all steps before submitting
+            for (let i = 1; i <= this.totalSteps; i++) {
+                if (!this.validateStep(i)) {
+                    this.showStep(i);
+                    this.showMessage(conFra2025Ajax.messages.error, 'error');
+                    return;
+                }
             }
-            
+
             this.setSubmitState(true);
-            
+
             const formData = new FormData(this.form[0]);
             formData.append('action', 'con_fra_2025_submit');
-            
+            formData.append('nonce', conFra2025Ajax.nonce);
+
             $.ajax({
                 url: conFra2025Ajax.ajax_url,
                 type: 'POST',
@@ -179,41 +197,39 @@ jQuery(document).ready(function($) {
                 error: this.handleSubmitError.bind(this)
             });
         },
-        
+
         handleSubmitSuccess: function(response) {
             this.setSubmitState(false);
-            
             if (response.success) {
-                this.showMessage(response.data.message || conFra2025Ajax.messages.success, 'success');
-                this.form[0].reset();
-                this.updateProgress();
+                this.form.parent().find('.con-fra-form-header').hide();
+                this.form.replaceWith('<div class="con-fra-success-message">' + (response.data.message || conFra2025Ajax.messages.success) + '</div>');
                 this.scrollToTop();
             } else {
                 this.showMessage(response.data.message || conFra2025Ajax.messages.error, 'error');
             }
         },
-        
+
         handleSubmitError: function() {
             this.setSubmitState(false);
             this.showMessage(conFra2025Ajax.messages.error, 'error');
         },
-        
+
         setSubmitState: function(isSubmitting) {
             const $button = $('#submitButton');
             const $buttonText = $button.find('.button-text');
             const $buttonSpinner = $button.find('.button-spinner');
-            
+
             if (isSubmitting) {
                 $button.prop('disabled', true);
-                $buttonText.text(conFra2025Ajax.messages.submitting);
+                $buttonText.hide();
                 $buttonSpinner.show();
             } else {
                 $button.prop('disabled', false);
-                $buttonText.text($buttonText.data('original-text') || 'Fragebogen senden');
+                $buttonText.show();
                 $buttonSpinner.hide();
             }
         },
-        
+
         showMessage: function(message, type) {
             const $messages = $('#formMessages');
             $messages
@@ -221,75 +237,18 @@ jQuery(document).ready(function($) {
                 .addClass(type)
                 .html(message)
                 .slideDown(300);
-            
+
             setTimeout(function() {
                 $messages.slideUp(300);
             }, 5000);
         },
-        
+
         scrollToTop: function() {
             $('html, body').animate({
                 scrollTop: $('.con-fra-2025-container').offset().top - 50
             }, 500);
         }
     };
-    
-    ConFra2025.init();
-    
-    $(document).on('change', 'input[name="address_type"]', function() {
-        $('input[name="address_du"], input[name="address_sie"], input[name="address_neutral"]').prop('checked', false);
-        
-        const value = $(this).val();
-        if (value === 'du') {
-            $('input[name="address_du"]').prop('checked', true);
-        } else if (value === 'sie') {
-            $('input[name="address_sie"]').prop('checked', true);
-        } else if (value === 'neutral') {
-            $('input[name="address_neutral"]').prop('checked', true);
-        }
-    });
-    
-    $(document).on('change', 'input[name="intonation_type"]', function() {
-        $('input[name="intonation_wir"], input[name="intonation_ich"], input[name="intonation_firma_de"], input[name="intonation_firma"], input[name="intonation_neutral"]').prop('checked', false);
-        
-        const value = $(this).val();
-        if (value === 'wir') {
-            $('input[name="intonation_wir"]').prop('checked', true);
-        } else if (value === 'ich') {
-            $('input[name="intonation_ich"]').prop('checked', true);
-        } else if (value === 'firma_de') {
-            $('input[name="intonation_firma_de"]').prop('checked', true);
-        } else if (value === 'firma') {
-            $('input[name="intonation_firma"]').prop('checked', true);
-        } else if (value === 'neutral') {
-            $('input[name="intonation_neutral"]').prop('checked', true);
-        }
-    });
-    
-    $(document).on('change', 'input[name="keywords_type"]', function() {
-        $('input[name="keywords_provided"], input[name="keywords_research"]').prop('checked', false);
-        
-        const value = $(this).val();
-        if (value === 'provided') {
-            $('input[name="keywords_provided"]').prop('checked', true);
-        } else if (value === 'research') {
-            $('input[name="keywords_research"]').prop('checked', true);
-        }
-    });
-    
-    $('input[type="text"], textarea').on('input', function() {
-        const $group = $(this).closest('.form-group');
-        if ($group.hasClass('error') && $(this).val().trim() !== '') {
-            $group.removeClass('error');
-            $group.find('.error-message').remove();
-        }
-    });
-    
-    $('input[type="checkbox"], input[type="radio"]').on('change', function() {
-        const $group = $(this).closest('.form-group');
-        if ($group.hasClass('error')) {
-            $group.removeClass('error');
-            $group.find('.error-message').remove();
-        }
-    });
+
+    ConFra2025Wizard.init();
 });
