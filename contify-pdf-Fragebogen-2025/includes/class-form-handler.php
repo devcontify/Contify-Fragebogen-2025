@@ -161,7 +161,6 @@ class CON_FRA_2025_Form_Handler {
         global $wpdb;
         
         $table_name = $wpdb->prefix . 'con_fra_2025_submissions';
-        
         $charset_collate = $wpdb->get_charset_collate();
         
         $sql = "CREATE TABLE $table_name (
@@ -172,7 +171,14 @@ class CON_FRA_2025_Form_Handler {
             PRIMARY KEY (id)
         ) $charset_collate;";
         
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        // dbDelta ist bereits in der Hauptdatei inkludiert
         dbDelta($sql);
+
+        // Fehlerbehandlung
+        if ($wpdb->last_error) {
+            return new WP_Error('db_creation_error', $wpdb->last_error);
+        }
+
+        return true;
     }
 }

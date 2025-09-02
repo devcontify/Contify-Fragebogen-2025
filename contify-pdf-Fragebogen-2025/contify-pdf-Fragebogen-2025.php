@@ -17,6 +17,23 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// PHP-Version prüfen
+if (!defined('CON_FRA_2025_MIN_PHP_VERSION')) {
+    define('CON_FRA_2025_MIN_PHP_VERSION', '7.4');
+}
+
+if (version_compare(PHP_VERSION, CON_FRA_2025_MIN_PHP_VERSION, '<')) {
+    add_action('admin_notices', 'con_fra_2025_php_version_notice');
+    function con_fra_2025_php_version_notice() {
+        ?>
+        <div class="notice notice-error is-dismissible">
+            <p><?php esc_html_e('Das Contify PDF Fragebogen 2025 Plugin erfordert PHP-Version ' . CON_FRA_2025_MIN_PHP_VERSION . ' oder höher.', 'contify-pdf-Fragebogen-2025'); ?></p>
+        </div>
+        <?php
+    }
+    return;
+}
+
 class Contify_PDF_Fragebogen_2025 {
     
     private static $instance = null;
@@ -35,10 +52,11 @@ class Contify_PDF_Fragebogen_2025 {
     }
     
     private function define_constants() {
-        define('CON_FRA_2025_VERSION', '1.0.0');
+        define('CON_FRA_2025_VERSION', '1.0.1'); // Version erhöht
         define('CON_FRA_2025_PLUGIN_URL', plugin_dir_url(__FILE__));
         define('CON_FRA_2025_PLUGIN_PATH', plugin_dir_path(__FILE__));
         define('CON_FRA_2025_PLUGIN_BASENAME', plugin_basename(__FILE__));
+        define('CON_FRA_2025_DB_VERSION_OPTION', 'con_fra_2025_db_version');
     }
     
     private function includes() {
@@ -55,7 +73,7 @@ class Contify_PDF_Fragebogen_2025 {
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
         
         // Initialisiere Komponenten
-        add_action('init', array($this, 'init'));
+        add_action('plugins_loaded', array($this, 'init'));
     }
     
     public function init() {
@@ -76,15 +94,30 @@ class Contify_PDF_Fragebogen_2025 {
     }
     
     public function activate() {
-        // Aktivierungslogik
-        $this->create_database_tables();
+        // Sicherstellen, dass die dbDelta-Funktion verfügbar ist
+        if (!function_exists('dbDelta')) {
+            require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        }
+
+        // Aktivierungslogik mit Datenbank-Versionskontrolle
+        if (version_compare(get_option(CON_FRA_2025_DB_VERSION_OPTION, '0'), CON_FRA_2025_VERSION, '<')) {
+            $this->create_database_tables();
+            update_option(CON_FRA_2025_DB_VERSION_OPTION, CON_FRA_2025_VERSION);
+        }
+
         $this->flush_rewrite_rules();
     }
     
     private function create_database_tables() {
         require_once CON_FRA_2025_PLUGIN_PATH . 'includes/class-form-handler.php';
         $form_handler = new CON_FRA_2025_Form_Handler();
-        $form_handler->create_database_table();
+        $result = $form_handler->create_database_table();
+
+        // Einfache Fehlerbehandlung
+        if (is_wp_error($result)) {
+            // Protokolliere den Fehler, ohne die Aktivierung zu blockieren
+            error_log('Contify Fragebogen DB Error: ' . $result->get_error_message());
+        }
     }
     
     public function deactivate() {

@@ -104,31 +104,35 @@ jQuery(document).ready(function($) {
             
             this.clearErrors(currentSection);
 
-            currentSection.find('input[required], textarea[required], select[required]').each(function() {
+            // Validate text, textarea, and select fields
+            currentSection.find('input[required], textarea[required], select[required]').not('[type="radio"]').not('[type="checkbox"]').each(function() {
                 const $field = $(this);
-                const $group = $field.closest('.form-group');
-                
-                if (!$field.is(':visible')) return;
-
-                if ($field.attr('type') === 'radio' || $field.attr('type') === 'checkbox') {
-                    const groupName = $field.attr('name');
-                    if(currentSection.find('input[name="' + groupName + '"]:checked').length === 0) {
-                       isValid = false;
-                       $group.addClass('error');
-                       if ($group.find('.error-message').length === 0) {
-                           $group.append('<span class="error-message">' + conFra2025Ajax.messages.required + '</span>');
-                       }
-                    }
-                } else {
-                    if (!$field.val() || $field.val().trim() === '') {
-                        isValid = false;
-                        $group.addClass('error');
-                        if ($group.find('.error-message').length === 0) {
-                            $group.append('<span class="error-message">' + conFra2025Ajax.messages.required + '</span>');
-                        }
+                if ($field.is(':visible') && (!$field.val() || $field.val().trim() === '')) {
+                    isValid = false;
+                    const $group = $field.closest('.form-group');
+                    $group.addClass('error');
+                    if ($group.find('.error-message').length === 0) {
+                        $group.append('<span class="error-message">' + conFra2025Ajax.messages.required + '</span>');
                     }
                 }
             });
+
+            // Validate required radio button groups
+            const radioGroups = {};
+            currentSection.find('input[type="radio"][required]').each(function() {
+                radioGroups[this.name] = true;
+            });
+
+            for (const groupName in radioGroups) {
+                if (currentSection.find('input[name="' + groupName + '"]:checked').length === 0) {
+                    isValid = false;
+                    const $group = currentSection.find('input[name="' + groupName + '"]').closest('.form-group');
+                    $group.addClass('error');
+                    if ($group.find('.error-message').length === 0) {
+                        $group.append('<span class="error-message">' + conFra2025Ajax.messages.required + '</span>');
+                    }
+                }
+            }
             
             if (!isValid) {
                 this.scrollToFirstError(currentSection);
