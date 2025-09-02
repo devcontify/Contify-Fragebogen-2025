@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "browsermcp": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "@browsermcp/mcp@latest"
+      ]
+    },
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server"
+      ]
+    }
+  }
+}
